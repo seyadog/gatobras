@@ -10,64 +10,80 @@ intención, no corrijas ni comentes la ortografía. Prefiere que se documente si
 
 ## Estado
 
-**Código escrito y probado en modo `offscreen` el 9-oct-2026** (PySide6 6.12 ya instalado en `.venv`).
-Falta probarlo a mano en la ventana real (Wayland). No instales nada ni crees archivos fuera de este directorio sin pedirlo.
+**Actualizado el 10-oct-2026.** App funcional y probada en modo `offscreen` (PySide6 6.12 instalado en `.venv`,
+Python 3.14). Instalada en el menú de GNOME. Repo privado: https://github.com/seyadog/gatobras (rama `main`).
+Falta usarla a mano con fotos reales. No instales nada ni crees archivos fuera de este directorio sin pedirlo
+(el lanzador e icono en `~/.local/share` se crearon porque el usuario lo pidió).
+
+Los cambios se ven al cerrar y volver a abrir la app (se ejecuta desde el código fuente, no hay compilación).
+Al cambiar algo, comprobar que arranca sin errores antes de avisar.
 
 ### Estructura
 
-- `gatobras/core.py` — lógica sin Qt: CSV atómico + `.bak`, SKU, `safe_move` (nunca sobrescribe;
-  copia+hash entre discos), `add_new`, `add_to_existing`, `undo`, `order_dims` (alto/ancho), config.
-- `gatobras/ui.py` — ventana PySide6: pestaña «Catalogar» (lista con miniaturas, preview, formulario,
-  guardar / agregar a obra existente / deshacer) y pestaña «CSV» (tabla editable con miniaturas
-  150 px, abrir con `xdg-open`). Miniaturas y preview en segundo plano con caché (`Loader`).
-- `gatobras/__main__.py`, `gatobras.sh` (lanzador: `./gatobras.sh`), `requirements.txt` (PySide6).
-- `tests/test_core.py` — 3 pruebas del núcleo (pasan): `python3 -m unittest tests.test_core`.
-- `.venv/` — Python 3.14 (PySide6 6.12 tiene rueda abi3, sirve para 3.14).
+- `gatobras/core.py` — lógica sin Qt: CSV atómico + `.bak`, SKU, `safe_move` (nunca sobrescribe; copia+hash
+  entre discos), `add_new` / `add_to_existing` (con `processed=` para fotos editadas), `undo`, `check_dims`
+  (solo avisos de medidas; `order_dims` queda sin uso en la UI), configuración.
+- `gatobras/ui.py` — PySide6: estilo oscuro estilo GNOME (`STYLE`), `MainWindow` (pestaña «Catalogar» en 3
+  columnas y pestaña «CSV» con tabla editable), `DestDialog` (carpeta de destino + nombre del CSV),
+  `EditorDialog`/`CropView` (girar y recortar), `Loader` (miniaturas en segundo plano con caché).
+- `gatobras/__main__.py`, `gatobras.sh` (lanzador), `requirements.txt` (PySide6), `assets/gatobras.svg` (gato negro).
+- `tests/test_core.py` — pruebas del núcleo (pasan): `.venv/bin/python -m unittest tests.test_core`.
+- `README.md` — uso y estructura para humanos.
 - Configuración: `~/Documents/PolluxData/gatobras_config/config.json` (último CSV, carpeta, prefijo).
+- Instalación en GNOME: `~/.local/share/applications/gatobras.desktop` + icono en
+  `~/.local/share/icons/hicolor/scalable/apps/gatobras.svg`.
 
-### Pendiente al retomar
+### Interfaz y flujo (decidido el 10-oct-2026)
 
-Ya verificado (humo offscreen con fotos de prueba): guardar, selección múltiple, deshacer, edición
-de celdas en la tabla CSV, CSV viejo de 8 columnas (conserva y añade columnas), `.bak`, y
-`load_scaled` con EXIF orientación 6 (sale bien orientada y sin deformar).
+- **Pestaña «Catalogar», 3 columnas:** izquierda = carpeta de origen (ruta completa) + miniaturas de pendientes;
+  centro = foto actual grande + botón «Girar / recortar» + formulario; derecha = destino (ruta, nombre del CSV,
+  prefijo) + miniaturas de lo ya catalogado, **la última guardada arriba**.
+- **Destino:** un diálogo con carpeta navegable + nombre del CSV (lista los `.csv` de esa carpeta o se escribe uno
+  nuevo). El CSV y `fotos/` se crean al primer guardado; si el CSV ya existe se abre y continúa.
+- **Flujo con teclado:** nombre ⏎ artista ⏎ alto ⏎ ancho ⏎ → guarda y pasa a la siguiente foto (cursor vuelve a
+  «Nombre»). SKU, año, técnica, tipo, fondo y notas están en «Otros datos (opcional)», fuera del flujo de Enter.
+  **Precio se quitó del formulario** (la columna sigue en el CSV, vacía).
+- **Todo es opcional** (nombre, artista…), salvo: si hay solo una de las dos medidas no deja guardar (hay que poner
+  las dos o ninguna; las obras sin medidas se completan después).
+- **Alto/ancho nunca se reordenan solos.** `check_dims` solo avisa si la forma de la foto contradice las medidas
+  («Ojo: la foto es vertical pero…»); con aviso, el primer Enter en «ancho» no guarda y el segundo sí. Casi
+  cuadradas: sin aviso. Botón ⇄ para intercambiar. El botón «Guardar y siguiente» guarda directo.
+- **Editor de fotos (excepción pedida por el usuario a «no tocar los píxeles»):** Ctrl+E. Girar ±90° y recortar
+  con rectángulo (mover/estirar). La edición vive en memoria (`self.edits`) y se aplica al guardar: `1.jpg` es la
+  versión editada (JPG calidad 95, sin EXIF; PNG sin pérdida) y el **original intacto** va a
+  `fotos/<SKU>/original/<N>_<nombre>`. Deshacer devuelve el original y borra solo la copia editada. Sin edición,
+  la foto solo se mueve. Las fotos editadas se marcan con ✎ en la lista; el preview y el aviso de medidas usan la
+  foto ya editada.
+- Look: fondo oscuro `#242424`, tarjetas `#303030` redondeadas, acento azul `#3584e4`, estilo Fusion.
 
-1. Ejecutar `./gatobras.sh` con **copias o fotos de prueba** (nunca `ftgoct9/`) y usarla a mano:
-   diálogos de archivo nativos en Wayland, aspecto, tamaño de la ventana, comodidad del flujo.
-2. Sin probar aún: «Agregar a obra existente…» desde la interfaz (sí probado en `core`), el botón
-   «Abrir CSV» (`xdg-open`) y mover entre discos distintos (`safe_move` por copia+hash).
-3. Datos de prueba reutilizables: se generaron en el scratchpad de la sesión (se pierden); crear
-   unas fotos JPG cualquiera en una carpeta temporal.
+### Decisiones de datos (9-oct-2026, siguen vigentes)
 
-### Decisiones tomadas en esta sesión
+- Solo JPG/PNG (sin HEIC). Columna `ruta_foto` (`fotos/<SKU>/N.ext`, relativa al CSV).
+- Columnas del CSV: `sku,nombre,artista,anio,tecnica,tipo,alto_cm,ancho_cm,fondo_cm,precio,fotos,ruta_foto,
+  archivo_original,notas`. En un CSV existente se conservan las suyas y las que falten se agregan al final;
+  a filas viejas se les rellena `ruta_foto` si la foto existe.
+- La tabla de la pestaña CSV es editable y cada edición reescribe el CSV (SKU, `fotos`, `ruta_foto` y
+  `archivo_original` son de solo lectura).
+- Tras guardar, el formulario conserva alto/ancho/fondo y limpia el resto. `nombre` queda vacío si no se escribe.
+- En selección múltiple se usan los valores del formulario tal cual para todas (sin confirmación por aviso).
+- El deshacer cubre el último guardado completo (lotes de selección múltiple, «agregar a existente» y editadas).
 
-- **10-oct-2026, editor de fotos (excepción pedida por el usuario a «no tocar los píxeles»):** botón «Girar / recortar
-  foto…» (Ctrl+E). La edición se guarda en memoria y se aplica al guardar la obra: `1.jpg` es la versión editada
-  (JPG calidad 95, sin EXIF) y el **original intacto** va a `fotos/<SKU>/original/<N>_<nombre>`. Deshacer devuelve el
-  original y borra solo la copia editada. Si no se edita, la foto se mueve sin tocar píxeles, como siempre.
-- Medidas: alto/ancho nunca se reordenan solos; solo avisa (Enter dos veces para guardar con aviso). Si solo hay una
-  de las dos medidas no deja guardar. Nombre/artista opcionales; Enter avanza de campo y en «ancho» guarda.
+### Pendiente (retomar aquí)
 
-- **10-oct-2026, diseño de la pestaña «Catalogar» en 3 columnas:** izquierda = carpeta de origen (ruta completa)
-  + miniaturas de fotos pendientes; centro = foto actual grande + formulario; derecha = carpeta de destino y CSV
-  (ruta completa, nombre, prefijo) + miniaturas de lo ya catalogado. La pestaña «CSV» sigue aparte.
-  App instalada en el menú de GNOME (`~/.local/share/applications/gatobras.desktop`, icono `assets/gatobras.svg`).
+Verificado offscreen con fotos de prueba: guardar, Enter-flujo, aviso de medidas y doble Enter, selección múltiple,
+deshacer, edición de celdas del CSV, CSV viejo de 8 columnas, `.bak`, `load_scaled` con EXIF 6, editor
+(girar+recortar+guardar+deshacer), orden de «Ya en el destino».
 
-- **10-oct-2026:** el destino se elige con un diálogo (`DestDialog` en ui.py): carpeta de destino (navegable) +
-  nombre del CSV (lista los .csv de esa carpeta o se escribe uno nuevo). El CSV y `fotos/` se crean ahí al
-  primer guardado; si el CSV ya existe se abre y continúa. Sin probar con la interfaz (falta PySide6).
-
-- Solo JPG/PNG (sin HEIC). Columna `ruta_foto` incluida (`fotos/<SKU>/N.ext`, relativa al CSV).
-- Columnas nuevas del CSV: `sku,nombre,artista,anio,tecnica,tipo,alto_cm,ancho_cm,fondo_cm,precio,
-  fotos,ruta_foto,archivo_original,notas`. En un CSV existente se conservan las suyas y las que
-  falten se agregan al final; a filas viejas se les rellena `ruta_foto` si la foto existe.
-- La tabla de la pestaña CSV es editable y cada edición reescribe el CSV (SKU, `fotos`, `ruta_foto`
-  y `archivo_original` son de solo lectura).
-- Tras guardar, el formulario conserva alto/ancho/fondo y limpia el resto. `nombre` queda vacío
-  si no se escribe (no se inventa «Cuadro CUA-xxx»).
-- Alto/ancho se reordenan al terminar de editar ambos campos, según la orientación de la foto;
-  aviso si es casi cuadrada y botón ⇄ para intercambiar. En selección múltiple se usan los
-  valores del formulario tal cual para todas.
-- El deshacer cubre el último guardado completo (incluye lotes de selección múltiple y «agregar a existente»).
+1. **Usarla a mano** con copias/fotos de prueba (nunca `ftgoct9/`): diálogos nativos en Wayland, tamaño de ventana,
+   comodidad del flujo, el aspecto real (las capturas fueron offscreen). Probar con una foto vertical real del Pixel.
+2. Sin probar aún en la ventana real: «Agregar a obra existente…», el botón «Abrir CSV» (`xdg-open`), mover entre
+   discos distintos, y el editor con ratón real (se probó simulando eventos).
+3. Ideas propuestas y NO hechas (el usuario eligió dejarlas para después): enderezar con ángulo fino (±10°),
+   brillo/contraste, zoom en la foto grande, buscar/filtrar en la pestaña CSV, aviso de fotos duplicadas,
+   aviso/lista de obras sin medidas, ordenar pendientes por fecha o nombre. Recomendadas primero: obras sin
+   medidas, zoom, enderezar.
+4. Los datos de prueba se generan en el scratchpad (se pierden): crear unas JPG cualquiera en una carpeta temporal.
+5. Si `.venv` falta: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt` (PySide6 pesa mucho).
 
 ## Origen: lo que se hizo a mano el 9-oct-2026
 
@@ -119,12 +135,9 @@ Medidas en cm, solo números, punto decimal. `fotos` = cuántas fotos hay en la 
 
 ### Alto y ancho
 
-El usuario escribe las dos medidas **en cualquier orden**. La app decide cuál es alto y cuál es
-ancho según la **forma de la obra en la foto** (apoyándose en el tamaño y la orientación EXIF):
-foto horizontal → la mayor es el ancho; vertical → la mayor es el alto. Si la obra es casi
-cuadrada (medidas casi iguales) o la foto está girada respecto de la obra, **avisar** y dejar que
-el usuario las intercambie con un botón. Las medidas son del **objeto físico**, nunca del tamaño
-de la foto en píxeles.
+El usuario escribe alto y ancho **en el orden que quiere** y la app los respeta (no los reordena). Solo **avisa**
+cuando la forma de la obra en la foto (ya con EXIF y edición aplicados) contradice las medidas; el usuario decide
+(botón ⇄ o seguir con un segundo Enter). Las medidas son del **objeto físico**, nunca del tamaño de la foto en píxeles.
 
 ## Decisiones ya tomadas
 
@@ -132,7 +145,7 @@ de la foto en píxeles.
 |---|---|
 | Lenguaje / UI | **Python + PySide6 (Qt)**, en un entorno virtual dentro de este directorio |
 | Formatos de entrada | Solo **JPG y PNG**. Si hace falta HEIC, se convierte antes con otra herramienta |
-| Foto | Se **mueve** (`mv`) al destino. Se conserva el archivo sin tocar los píxeles |
+| Foto | Se **mueve** al destino sin tocar los píxeles; si el usuario la edita (girar/recortar), `1.jpg` es la editada y el original va a `original/` |
 | Destino de fotos | Junto al CSV: `<carpeta del CSV>/fotos/<SKU>/N.<ext>` (rutas relativas) |
 | CSV | Uno que el usuario elige; se amplía fila a fila. UTF-8, con comillas si hay comas |
 | Deshacer | Solo el último guardado (foto de vuelta + fila borrada) |
@@ -145,7 +158,7 @@ de la foto en píxeles.
 - Hacer una copia de seguridad del CSV (`.bak`) antes de la primera escritura de cada sesión.
 - Mover entre sistemas de archivos distintos = copiar, verificar tamaño/hash y recién borrar el
   origen. Si algo falla, no borrar nada y avisar.
-- **No tocar los píxeles**: ni redimensionar, ni recomprimir, ni quitar EXIF. Solo mover y renombrar.
+- **No tocar los píxeles** salvo que el usuario edite la foto a propósito (girar/recortar; el original queda intacto en `original/`): ni redimensionar, ni recomprimir, ni quitar EXIF. Solo mover y renombrar.
   (La conversión a WebP y la limpieza del GPS son un paso posterior, en el proyecto de la tienda.)
 - No hacer commits ni `git add` salvo que el usuario lo pida.
 - Preservar columnas desconocidas del CSV al abrirlo; añadir las que falten sin romper las filas.
