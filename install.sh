@@ -35,24 +35,35 @@ else
 fi
 
 if [ "$OS" = "Darwin" ]; then
-  APP="$HOME/Applications/gatobras.app"
-  mkdir -p "$APP/Contents/MacOS"
+  # Preferir /Applications (aparece en Launchpad y Finder); si no hay permiso, ~/Applications
+  APPDIR="/Applications"; [ -w "$APPDIR" ] || { APPDIR="$HOME/Applications"; mkdir -p "$APPDIR"; }
+  APP="$APPDIR/gatobras.app"
+  rm -rf "$APP"
+  mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
   cat > "$APP/Contents/MacOS/gatobras" <<EOS
 #!/bin/sh
 exec "$DEST/gatobras.sh"
 EOS
   chmod +x "$APP/Contents/MacOS/gatobras"
+  ICONSET="$(mktemp -d)/gatobras.iconset"
+  (cd "$DEST" && QT_QPA_PLATFORM=offscreen .venv/bin/python -m gatobras.make_icons "$ICONSET") \
+    && iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/gatobras.icns" || echo "(sin icono)"
   cat > "$APP/Contents/Info.plist" <<'EOS'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleName</key><string>gatobras</string>
+<key>CFBundleDisplayName</key><string>gatobras</string>
 <key>CFBundleExecutable</key><string>gatobras</string>
+<key>CFBundleIconFile</key><string>gatobras</string>
 <key>CFBundleIdentifier</key><string>local.gatobras</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 EOS
-  echo "✔ Listo. Ábrela desde ~/Applications/gatobras.app (o Spotlight: «gatobras»), o con $DEST/gatobras.sh"
+  touch "$APP"
+  echo "✔ Listo: $APP (ábrela desde Launchpad/Spotlight y arrástrala al Dock si quieres)"
 else
   echo "✔ Listo. Ejecuta $DEST/gatobras.sh"
 fi
