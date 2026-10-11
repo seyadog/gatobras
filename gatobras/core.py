@@ -328,3 +328,42 @@ class Store:
             raise GatoError("Celda no editable")
         row[col] = value
         self.save()
+
+
+# ---------- actualización ----------
+REPO = "seyadog/gatobras"
+APP_ROOT = Path(__file__).resolve().parent.parent
+
+
+def update_app(root=APP_ROOT):
+    """Actualiza el código desde GitHub. Devuelve un mensaje. No toca .venv, datos ni configuración.
+
+    En un clon de git hace `git pull --ff-only`; si no, baja el tarball de `main` y copia encima.
+    """
+    import subprocess
+    import tarfile
+    import urllib.request
+
+    root = Path(root)
+    if (root / ".git").exists():
+        r = subprocess.run(["git", "-C", str(root), "pull", "--ff-only"], capture_output=True, text=True, timeout=120)
+        if r.returncode != 0:
+            raise GatoError("git pull falló:\n" + (r.stderr or r.stdout).strip())
+        return r.stdout.strip() or "Listo."
+    req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/tarball/main",
+                                 headers={"User-Agent": "gatobras"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp, tempfile.TemporaryDirectory() as tmp:
+            tf = tarfile.open(fileobj=resp, mode="r|gz")
+            tf.extractall(tmp, filter="data")
+            src = next(Path(tmp).iterdir())
+            for p in src.rglob("*"):
+                if p.is_file():
+                    dest = root / p.relative_to(src)
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(p, dest)
+    except GatoError:
+        raise
+    except Exception as e:
+        raise GatoError(f"No se pudo actualizar: {e}")
+    return "Código actualizado."

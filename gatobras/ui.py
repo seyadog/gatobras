@@ -1,9 +1,8 @@
 """Interfaz Qt de gatobras."""
-import subprocess
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QPointF, QRectF, QRunnable, QSize, Qt, QThreadPool, Signal
-from PySide6.QtGui import QColor, QIcon, QImage, QImageReader, QPainter, QPen, QPixmap, QTransform
+from PySide6.QtCore import QObject, QPointF, QRectF, QRunnable, QSize, Qt, QThreadPool, QTimer, QUrl, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QIcon, QImage, QImageReader, QPainter, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
                                QGridLayout, QGroupBox,
                                QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
@@ -550,6 +549,10 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(central)
         lay.addWidget(self.tabs, 1)
         self.setCentralWidget(central)
+        b_upd = QPushButton("Actualizar gatobras")
+        b_upd.setToolTip("Descarga la última versión desde GitHub")
+        b_upd.clicked.connect(self.update_app)
+        self.statusBar().addPermanentWidget(b_upd)
         self.statusBar().showMessage("Listo")
 
     # ---------- carpeta y CSV ----------
@@ -895,7 +898,9 @@ class MainWindow(QMainWindow):
 
     # ---------- vista del CSV ----------
     def fill_table(self):
+        """Llena la tabla por tandas (la ventana no se congela con CSV grandes)."""
         t = self.table
+        self._fill_gen = getattr(self, "_fill_gen", 0) + 1
         t.blockSignals(True)
         t.clear()
         if not self.store:
@@ -908,7 +913,17 @@ class MainWindow(QMainWindow):
         t.setRowCount(len(self.store.rows))
         t.verticalHeader().setDefaultSectionSize(TABLE_THUMB + 10)
         t.setColumnWidth(0, TABLE_THUMB + 10)
-        for r, row in enumerate(self.store.rows):
+        t.blockSignals(False)
+        self._fill_chunk(self._fill_gen, 0)
+
+    def _fill_chunk(self, gen, start, size=15):
+        if gen != self._fill_gen or not self.store:
+            return
+        t, cols, rows = self.table, self.store.columns, self.store.rows
+        end = min(start + size, len(rows))
+        t.blockSignals(True)
+        for r in range(start, end):
+            row = rows[r]
             lbl = QLabel()
             lbl.setAlignment(Qt.AlignCenter)
             p = self.store.root / row["ruta_foto"] if row.get("ruta_foto") else self.store.first_photo(row["sku"])
@@ -924,6 +939,11 @@ class MainWindow(QMainWindow):
                     it.setFlags(it.flags() & ~Qt.ItemIsEditable)
                 t.setItem(r, c, it)
         t.blockSignals(False)
+        if end < len(rows):
+            self.statusBar().showMessage(f"Cargando CSV… {end}/{len(rows)}")
+            QTimer.singleShot(0, lambda: self._fill_chunk(gen, end, size))
+        else:
+            self.statusBar().showMessage(f"CSV: {len(rows)} obras")
 
     def _cell_edited(self, item):
         if not self.store or item.column() == 0:
@@ -936,10 +956,23 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "CSV", str(e))
 
+    def update_app(self):
+        self.statusBar().showMessage("Actualizando…")
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            msg = core.update_app()
+        except GatoError as e:
+            QMessageBox.warning(self, "Actualizar", str(e))
+            self.statusBar().showMessage("Falló la actualización")
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+        QMessageBox.information(self, "Actualizar", f"{msg}\n\nCierra y vuelve a abrir gatobras para ver los cambios.")
+        self.statusBar().showMessage("Actualizado; reinicia la app")
+
     def open_csv_external(self):
         if self.store and self.store.path.exists():
-            subprocess.Popen(["xdg-open", str(self.store.path)], stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=True)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.store.path)))
         else:
             QMessageBox.information(self, "gatobras", "El CSV todavía no existe (se crea al guardar la primera obra).")
 

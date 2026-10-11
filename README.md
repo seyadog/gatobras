@@ -64,3 +64,10 @@ Un CSV existente se abre y se continúa: conserva sus columnas y agrega las que 
 - `tests/test_core.py` — pruebas del núcleo: `python3 -m unittest tests.test_core`.
 
 Notas de diseño y decisiones: ver `CLAUDE.md`. Configuración local en `~/Documents/PolluxData/gatobras_config/`.
+
+## Instalar / actualizar en otro equipo (macOS o Linux)
+
+    curl -fsSL https://raw.githubusercontent.com/seyadog/gatobras/main/install.sh | sh
+
+Instala en `~/gatobras` (en Mac también crea `~/Applications/gatobras.app`). Volver a correrlo actualiza.
+Dentro de la app, el botón **Actualizar gatobras** (barra inferior) hace lo mismo; luego hay que reabrirla.
